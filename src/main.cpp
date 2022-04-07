@@ -1,65 +1,45 @@
 #include <Arduino.h>
-// #include <ESP8266WiFi.h>
-#include "painlessMesh.h"
 
-// const char* ssid     = "dlink-17D8";
-// const char* password = "whfux51838";
+int tDelay = 100;
 
-#define   MESH_PREFIX     "whateverYouLike"
-// need 8+ key password due to wpa auth.
-#define   MESH_PASSWORD   "somethingSneaky"
-#define   MESH_PORT       5555
+int clearPin = 5;
+int dataPin = 6;
+int clockPin = 7;
+int latchPin = 8;
 
-Scheduler userScheduler; // to control your personal task
-painlessMesh  mesh;
-
-// User stub
-void sendMessage() ; // Prototype so PlatformIO doesn't complain
-
-Task taskSendMessage( TASK_SECOND * 1 , TASK_FOREVER, &sendMessage );
-
-void sendMessage() {
-  String msg = "Hello from node ";
-  msg += mesh.getNodeId();
-  mesh.sendBroadcast( msg );
-  taskSendMessage.setInterval( random( TASK_SECOND * 1, TASK_SECOND * 5 ));
-  Serial.printf("sending message ...\n");
-}
-
-// Needed for painless library
-void receivedCallback( uint32_t from, String &msg ) {
-  Serial.printf("startHere: Received from %u msg=%s\n", from, msg.c_str());
-}
-
-void newConnectionCallback(uint32_t nodeId) {
-    Serial.printf("--> startHere: New Connection, nodeId = %u\n", nodeId);
-}
-
-void changedConnectionCallback() {
-  Serial.printf("Changed connections\n");
-}
-
-void nodeTimeAdjustedCallback(int32_t offset) {
-    Serial.printf("Adjusted time %u. Offset = %d\n", mesh.getNodeTime(),offset);
-}
+bool DirectionState = 0;
 
 void setup() {
-  Serial.begin(115200);
+    pinMode(clearPin, OUTPUT);
+    pinMode(clockPin, OUTPUT);
+    pinMode(latchPin, OUTPUT);
+    pinMode(dataPin, OUTPUT);
 
-//mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | GENERAL | MSG_TYPES | REMOTE ); // all types on
-  mesh.setDebugMsgTypes( ERROR | STARTUP );  // set before init() so that you can see startup messages
-
-  mesh.init( MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT );
-  mesh.onReceive(&receivedCallback);
-  mesh.onNewConnection(&newConnectionCallback);
-  mesh.onChangedConnections(&changedConnectionCallback);
-  mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
-
-  userScheduler.addTask( taskSendMessage );
-  taskSendMessage.enable();
+    digitalWrite(clearPin, LOW);
+    digitalWrite(clearPin, HIGH);
+    
 }
 
-void loop() {
-  // it will run the user scheduler as well
-  mesh.update();
+void updateShiftRegister(byte leds){
+    digitalWrite(latchPin, LOW);
+    if (DirectionState == false) {
+        shiftOut(dataPin, clockPin, LSBFIRST, leds);
+    } else {
+        shiftOut(dataPin, clockPin, MSBFIRST, leds);
+    }
+    digitalWrite(latchPin, HIGH);
+}
+
+void loop(){
+    byte leds = 0B00000000;
+    updateShiftRegister(leds);
+    delay(tDelay);
+
+    for (int i = 0; i < 8; i++){
+        // set the bit i to 1, starting with bit 0, the least significant bit (rightmost bit)
+        bitSet(leds, i);
+        updateShiftRegister(leds);
+        delay(tDelay);
+    }
+    DirectionState = !DirectionState;
 }
